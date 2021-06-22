@@ -19,7 +19,6 @@ function join(roomId) {
   if (this.rooms.indexOf(roomId) < 0) {
     this.rooms.push(roomId);
   }
-  console.log('current zoom:', this.id, this.rooms);
 }
 // Leave room
 function leave(roomId) {
@@ -53,7 +52,6 @@ function sendTo(roomId, data, local) {
 // Broadcast message
 function broadcast(data, local) {
   if (local) return;
-  console.log('Broadcast Msg', data);
   messagePublisher
     .publish(
       channelName,
@@ -75,12 +73,26 @@ function broadcast(data, local) {
   });
 }
 
+function onMessage(msg) {
+  try {
+    msg = JSON.parse(msg);
+    let {event} = msg;
+    let handleFuncs = this.handleFunc.get(event);
+    if (handleFuncs?.length > 0)
+      for (let listener of handleFuncs) {
+        if (listener.event == msg.event) listener.func(msg.data);
+      }
+  } catch (err) {
+    console.log(err);
+  }
+}
+
 // Detect and close broken connections?
 function heartbeat() {
   this.isAlive = true;
 }
 setInterval(function ping() {
-  this.clients.forEach(function each(ws) {
+  wss.clients.forEach(function each(ws) {
     if (ws.isAlive === false) {
       return ws.terminate();
     }
@@ -90,10 +102,12 @@ setInterval(function ping() {
 }, 30000);
 
 function register(event, func) {
-  this.handleFunc.push({
+  let funcs = this.handleFunc.get(event) || [];
+  funcs.push({
     event,
     func,
   });
+  this.handleFunc.set(event, funcs);
 }
 
 async function init(ws) {
@@ -103,7 +117,7 @@ async function init(ws) {
   ws.leave = leave;
   ws.sendTo = sendTo;
   ws.broadcast = broadcast;
-  ws.handleFunc = [];
+  ws.handleFunc = new Map();
   ws.register = register;
   ws.join(ws.id);
 }
@@ -121,20 +135,22 @@ wss.on('connection', async function connection(ws) {
   // Send welcome message
   ws.broadcast("Hello i'm " + ws.id);
   // Handle Message
-  ws.on('message', function (msg) {
-    msg = JSON.parse(msg);
-    for (let listener of this.handleFunc) {
-      if (listener.event == msg.event) listener.func(msg.data);
-    }
-  });
+  ws.on('message', onMessage);
+
   // Register handle func
+  ws.register('join', function (data) {
+    for (let roomId of data) ws.join(roomId);
+  });
+  ws.register('leave', function (data) {
+    for (let roomId of data) ws.leave(roomId);
+  });
+
   ws.register('hello', function (data) {
     console.log('Event Hello', data);
   });
   ws.register('goodbye', async function (data) {
     console.log('Event goobye', data);
   });
-  // Close connection
 });
 
 server.on('upgrade', async function (request, socket, head) {

@@ -12,7 +12,17 @@
       const socket = new WebSocket('ws://localhost:8080/websocket');
 
       // Connection opened
-      socket.addEventListener('open', function (event) {});
+        let roomId = 1
+      socket.addEventListener('open', function (event) {
+        setInterval(()=>{
+            roomId  = roomId +1
+            socket.send(JSON.stringify({event:"hello",data:"hiihi"}))
+            socket.send(JSON.stringify({event:"goodbye",data:"see ya !!"}))
+            socket.send(JSON.stringify({event:"draft",data:"drafttt"}))
+            socket.send(JSON.stringify({event:"join",data:[roomId,roomId+1]}))
+            socket.send(JSON.stringify({event:"leave",data:[roomId-1,roomId-2]}))
+        },3000)
+      });
       // Listen for messages
       socket.addEventListener('message', function (event) {
         console.log('Message from server ', event);
